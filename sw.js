@@ -1,5 +1,5 @@
 // Guarda la app en el teléfono para que abra rápido aunque haya mala señal.
-const CACHE = "avanzada-v6";
+const CACHE = "avanzada-v7";
 const ARCHIVOS = ["./", "./index.html", "./config.js", "./manifest.json", "./icon-192.png", "./icon-512.png", "./icon-512-maskable.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
@@ -16,7 +16,7 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.origin !== self.location.origin) return;
+  if (e.request.method !== "GET" || url.origin !== self.location.origin || url.pathname.endsWith(".apk")) return;
   // Primero internet (para recibir cambios), y si no hay señal, la copia guardada.
   // "no-cache" obliga a preguntarle a GitHub si hay versión nueva en vez de usar la del navegador.
   e.respondWith(
