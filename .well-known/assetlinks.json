@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.equipo_avanzada.app",
+        "sha256_cert_fingerprints": ["A0:97:61:2C:8F:9C:71:B5:4C:E5:1E:E0:51:BB:BD:66:02:02:F3:E8:06:6E:C7:B9:98:95:4F:F0:D3:94:BE:0C"]
+      }
+    }]
