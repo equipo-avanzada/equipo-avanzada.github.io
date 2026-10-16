@@ -1,35 +1,40 @@
 # Avanzada · Santander Arena
 
-App web instalable (PWA) para registrar vehículos en la hoja **patentes** y buscar patentes (muestra todos los registros repetidos y las patentes parecidas).
+App para registrar vehículos en la hoja **patentes** y buscar patentes (muestra todos los registros repetidos y las patentes parecidas).
 
-## 1. Conectar la hoja (Apps Script)
+- **App:** https://equipo-avanzada.github.io
+- **Android:** https://equipo-avanzada.github.io/avanzada.apk
+- **iPhone:** abrir el link en Safari → la app muestra cómo instalarla (Compartir → Agregar a inicio)
 
-1. Abre la hoja de Google Sheets → **Extensiones → Apps Script**.
-2. Borra lo que haya y pega el contenido de `apps-script/Codigo.gs`.
-3. Cambia `CLAVE: 'CAMBIA_ESTA_CLAVE'` por una clave del equipo (la pedirá la app una vez en cada teléfono).
-4. Guarda → **Implementar → Nueva implementación** → tipo **Aplicación web**:
-   - Ejecutar como: **Yo**
-   - Quién tiene acceso: **Cualquier usuario** (sin esto la app no puede conectarse)
-5. Autoriza los permisos y copia el link que termina en `/exec`.
-6. Pega ese link en `config.js`.
+## Cómo funciona
 
-Para probar: abre el link `/exec` en el navegador; debe decir **Avanzada OK**.
+```
+Teléfono (app web, APK Android o iPhone)  →  Apps Script (con clave)  →  Hoja de Google "patentes"
+```
 
-> Si después cambias el código: **Implementar → Gestionar implementaciones → editar (lápiz) → Versión: Nueva versión**. Así el link no cambia.
+- La app está publicada gratis en GitHub Pages. El APK de Android solo abre esa misma página, así que **cualquier cambio que se suba aquí aparece solo en la web, en el APK y en el iPhone**. No hay que reinstalar nada.
+- Los datos **no** están en GitHub: siguen en la hoja de Google. Sin la clave del equipo nadie puede leer ni escribir.
+- La clave se pide una vez y dura 8 horas en cada teléfono.
 
-## 2. Publicar en GitHub Pages
+## Hacer un cambio
 
-1. Crea un repositorio en GitHub (público, para que Pages sea gratis).
-2. **Add file → Upload files** y sube todos los archivos de esta carpeta.
-3. **Settings → Pages → Branch: main / (root) → Save**.
-4. En 1–2 minutos queda en `https://TU-USUARIO.github.io/NOMBRE-DEL-REPO/`.
+| Qué cambia | Dónde | Qué hacer después |
+|---|---|---|
+| Cómo se ve la app, textos, botones | `index.html` | Subir a GitHub. Llega a todos en 1–10 min (cerrar y abrir la app). |
+| Link de Apps Script | `config.js` | Subir el número en `config.js?v=` dentro de `index.html`. |
+| Cómo guarda o busca en la hoja | `apps-script/Codigo.gs` | Pegarlo en Apps Script (con la clave real) → Implementar → Gestionar implementaciones → lápiz → **Nueva versión**. |
+| Ícono o nombre de la app Android | Hay que generar un APK nuevo | Firmarlo con la **misma llave** (`signing.keystore`) y reinstalarlo. |
 
-## 3. Instalar en el teléfono
+## Conectar la hoja (Apps Script)
 
-- **Android (Chrome):** menú ⋮ → *Agregar a pantalla principal* / *Instalar app*.
-- **iPhone (Safari):** botón Compartir → *Agregar a inicio*.
+1. En la hoja: **Extensiones → Apps Script**. Pegar `apps-script/Codigo.gs`.
+2. Cambiar `CLAVE: 'CAMBIA_ESTA_CLAVE'` por la clave del equipo (**no subirla a GitHub**).
+3. **Implementar → Nueva implementación → Aplicación web**. Ejecutar como: **Yo**. Acceso: **Cualquier usuario**.
+4. Pegar el link `/exec` en `config.js`.
 
-## Notas
+## Archivos especiales
 
-- Sin señal, los registros quedan guardados en el teléfono y se envían solos al volver internet (sin duplicarse).
-- La clave del equipo protege los nombres y teléfonos: aunque alguien encuentre el link en GitHub, no puede leer ni escribir la hoja sin ella. **No subas `Codigo.gs` con la clave real.**
+- `avanzada.apk`: la app de Android.
+- `.well-known/assetlinks.json`: le demuestra a Android que la app y la página son del mismo dueño (así la app abre sin barra del navegador). No tocar.
+- `.nojekyll`: necesario para que GitHub publique la carpeta `.well-known`.
+- La **llave de firma** del APK (`signing.keystore` + contraseñas) **no está en GitHub**. Guárdala en un lugar seguro: sin ella no se puede actualizar el APK ni subirlo a Play Store.
