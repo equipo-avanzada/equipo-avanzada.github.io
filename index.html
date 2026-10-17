@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="config.js?v=3"></script><!-- si cambias config.js, sube este número -->
+<script src="pegar.js?v=1"></script><!-- lee los datos copiados de WhatsApp -->
 
 <style>
   :root{
@@ -107,6 +108,28 @@
   footer{padding:20px 24px 16px;text-align:center;font-size:12px;color:var(--gris2);letter-spacing:.04em}
 
   /* ── Instalar (iPhone / Android en el navegador) ── */
+  /* ── Pegar datos copiados ── */
+  button.pegar{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:46px;margin:-4px 0 16px;border:1.5px dashed var(--rojo);border-radius:12px;background:#FFF7F7;color:var(--rojo-osc);font-family:var(--texto);font-size:15px;font-weight:700;cursor:pointer}
+  button.pegar:active{background:#FBEAEA}
+  #errorPegar{margin:-8px 0 14px}
+  .hoja-fondo{position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center}
+  .hoja-fondo.on{display:flex}
+  .hoja{width:100%;max-width:520px;max-height:88vh;overflow-y:auto;background:#fff;border-radius:24px 24px 0 0;padding:26px 22px calc(20px + env(safe-area-inset-bottom));text-align:center;animation:subir .22s ease-out}
+  @keyframes subir{from{transform:translateY(40px);opacity:.4}}
+  .hoja-ico{width:64px;height:64px;margin:0 auto 12px;border-radius:50%;background:#FBEAEA;display:flex;align-items:center;justify-content:center}
+  .hoja h3{margin:0;font-family:var(--display);font-weight:800;font-size:26px;text-transform:uppercase;line-height:1.05}
+  .hoja-sub{margin:6px 0 16px;font-size:14px;color:var(--gris)}
+  .hoja .resumen{border-top:0;margin:0 0 18px;padding:0}
+  .hoja .resumen .falta{color:#B00000;font-weight:600}
+  .hoja .sec{margin-top:10px}
+  .hp-lista{display:flex;flex-direction:column;gap:10px;margin-bottom:6px;text-align:left}
+  .hp-item{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:1.5px solid var(--linea);border-radius:14px;background:#fff;font-family:var(--texto);cursor:pointer;text-align:left}
+  .hp-item:active{border-color:var(--rojo);background:#FFF7F7}
+  .hp-item .pat{flex:none;font-family:var(--display);font-weight:700;font-size:18px;letter-spacing:.12em;border:2px solid var(--tinta);border-radius:7px;padding:1px 8px}
+  .hp-item .txt{min-width:0;font-size:14px;line-height:1.3}
+  .hp-item .txt b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hp-item .txt span{color:var(--gris2)}
+  body.hoja-abierta{overflow:hidden}
   #instalar{position:fixed;inset:0;z-index:50;background:var(--fondo);overflow-y:auto;display:none}
   #instalar.on{display:block}
   body.instalando{overflow:hidden}
@@ -143,6 +166,11 @@
     <section class="card">
       <div id="vistaForm">
         <h2>Registrar vehículo</h2>
+        <button type="button" class="pegar" id="btnPegar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M9 13h6M9 17h4"/></svg>
+          Pegar datos copiados
+        </button>
+        <div class="error" id="errorPegar" role="alert"></div>
         <form id="form" novalidate>
           <div class="campo">
             <label for="nombre">Nombre completo</label>
@@ -230,6 +258,20 @@
 
   <footer>Equipo Avanzada · Santander Arena</footer>
 </main>
+
+<!-- ═════════ DATOS COPIADOS ═════════ -->
+<div id="hojaPegar" class="hoja-fondo" role="dialog" aria-modal="true" aria-labelledby="hpTitulo">
+  <div class="hoja">
+    <div class="hoja-ico" aria-hidden="true">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#CC0000" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M9 14l2 2 4-4"/></svg>
+    </div>
+    <h3 id="hpTitulo">¿Usar los datos copiados?</h3>
+    <p class="hoja-sub" id="hpSub">Los podrás revisar antes de agregar</p>
+    <div id="hpDatos"></div>
+    <button type="button" class="prim" id="hpSi">Sí, usar datos</button>
+    <button type="button" class="sec" id="hpNo">No por ahora</button>
+  </div>
+</div>
 
 <!-- ═════════ INSTALAR ═════════ -->
 <div id="instalar" role="dialog" aria-modal="true" aria-labelledby="insTitulo">
@@ -519,11 +561,134 @@
     vaciarCola();
   });
 
-  $("nuevo").addEventListener("click", function () {
-    $("form").reset(); $("error").textContent = "";
+  function formularioNuevo() {
+    $("form").reset(); $("error").textContent = ""; $("errorPegar").textContent = "";
     $("vistaHecho").classList.remove("on"); $("vistaForm").style.display = "";
-    $("nombre").focus();
+  }
+  $("nuevo").addEventListener("click", function () {
+    formularioNuevo();
+    // Si se copiaron varios vehículos juntos, ofrecer el siguiente.
+    if (restantes.length) ofrecerDatos(restantes);
+    else $("nombre").focus();
   });
+
+  /* ───── Pegar datos copiados (WhatsApp) ───── */
+  // Como en las apps de banco: si lo copiado tiene datos de un vehículo, se ofrece llenar el formulario.
+  // Android: aparece solo al abrir la app (después de permitirlo una vez con el botón).
+  // iPhone: con el botón "Pegar datos copiados" (Apple no deja leerlo solo).
+  var CLAVE_PEGADO = "avanzada_pegado";
+  var restantes = [], ofrecidos = [];
+
+  function huellaTexto(t) {
+    for (var h = 0, i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0;
+    return String(h);
+  }
+  function filaResumen(etiqueta, valor, clase) {
+    var d = el("div"); d.appendChild(el("span", null, etiqueta));
+    d.appendChild(el("span", valor ? clase || "" : "falta", valor || "Falta"));
+    return d;
+  }
+  // (con espacios que no se cortan, para que el número no quede partido en dos líneas)
+  function telBonitoCorto(t) { var d = String(t || ""); return d.length === 9 ? d.slice(0, 1) + " " + d.slice(1, 5) + " " + d.slice(5) : d; }
+
+  function ofrecerDatos(lista) {
+    ofrecidos = lista.slice();
+    var box = $("hpDatos"); box.innerHTML = "";
+    if (lista.length === 1) {
+      var r = lista[0], res = el("div", "resumen");
+      res.appendChild(filaResumen("Nombre", r.nombre));
+      res.appendChild(filaResumen("Teléfono", telBonitoCorto(r.telefono)));
+      res.appendChild(filaResumen("Empresa / área", r.empresa));
+      res.appendChild(filaResumen("Patente", r.patente, "pat"));
+      box.appendChild(res);
+      $("hpTitulo").textContent = "¿Usar los datos copiados?";
+      $("hpSub").textContent = "Los podrás revisar antes de agregar";
+      $("hpSi").style.display = "";
+    } else {
+      $("hpTitulo").textContent = "Copiaste " + lista.length + " vehículos";
+      $("hpSub").textContent = "Elige cuál quieres agregar primero";
+      $("hpSi").style.display = "none";
+      var ul = el("div", "hp-lista");
+      lista.forEach(function (r, i) {
+        var b = el("button", "hp-item"); b.type = "button";
+        b.appendChild(el("span", "pat", r.patente));
+        var t = el("span", "txt"); t.appendChild(el("b", null, r.nombre || "Sin nombre"));
+        t.appendChild(el("span", null, [r.empresa, telBonitoCorto(r.telefono)].filter(Boolean).join(" · ")));
+        b.appendChild(t);
+        b.addEventListener("click", function () { usarDatos(i); });
+        ul.appendChild(b);
+      });
+      box.appendChild(ul);
+    }
+    $("hojaPegar").classList.add("on"); document.body.classList.add("hoja-abierta");
+  }
+  function cerrarHoja() { $("hojaPegar").classList.remove("on"); document.body.classList.remove("hoja-abierta"); }
+
+  function usarDatos(i) {
+    var r = ofrecidos[i];
+    restantes = ofrecidos.filter(function (_, j) { return j !== i; });
+    cerrarHoja();
+    irA("agregar"); formularioNuevo();
+    $("nombre").value = r.nombre || ""; $("telefono").value = r.telefono || "";
+    $("empresa").value = r.empresa || ""; $("patente").value = r.patente || "";
+    var falta = !r.nombre ? "nombre" : !r.telefono ? "telefono" : !r.empresa ? "empresa" : "";
+    if (r.telefono && r.telefono.length !== 9) falta = falta || "telefono";
+    $("error").textContent = falta === "nombre" ? "Falta el nombre." : falta === "telefono" ? (r.telefono ? "Revisa el teléfono: debe tener 9 dígitos." : "Falta el teléfono.") : falta === "empresa" ? "Falta la empresa o área." : "";
+    if (falta) $(falta).focus();
+    else $("btn").scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+  $("hpSi").addEventListener("click", function () { usarDatos(0); });
+  $("hpNo").addEventListener("click", function () { restantes = []; cerrarHoja(); });
+  $("hojaPegar").addEventListener("click", function (e) { if (e.target === this) { restantes = []; cerrarHoja(); } });
+
+  // Revisa un texto copiado. "avisar" = mostrar mensaje si no sirve (cuando se tocó el botón).
+  function revisarTexto(texto, avisar) {
+    var lista = window.leerDatosCopiados ? window.leerDatosCopiados(texto) : [];
+    if (texto) guardar(CLAVE_PEGADO, huellaTexto(texto)); // no volver a ofrecer lo mismo
+    if (lista.length) { $("errorPegar").textContent = ""; ofrecerDatos(lista); return true; }
+    if (avisar) $("errorPegar").textContent = texto ? "Lo copiado no tiene datos de un vehículo (se necesita la patente y el nombre o teléfono)." : "No hay nada copiado.";
+    return false;
+  }
+
+  $("btnPegar").addEventListener("click", function () {
+    $("errorPegar").textContent = "";
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      $("errorPegar").textContent = "Este teléfono no deja leer lo copiado. Mantén presionado el campo Nombre y toca Pegar.";
+      return;
+    }
+    navigator.clipboard.readText().then(function (t) { revisarTexto(t, true); }).catch(function () {
+      $("errorPegar").textContent = "No se pudo leer lo copiado. Cuando el teléfono pregunte, toca Permitir. También puedes mantener presionado el campo Nombre y tocar Pegar.";
+    });
+  });
+
+  // Si pegan el mensaje completo en cualquier campo, también se ofrece repartirlo.
+  $("form").addEventListener("paste", function (e) {
+    var t = (e.clipboardData || window.clipboardData || { getData: function () { return ""; } }).getData("text");
+    if (!t || (t.indexOf("\n") === -1 && t.length < 20)) return; // pegado normal de un dato suelto
+    var lista = window.leerDatosCopiados ? window.leerDatosCopiados(t) : [];
+    if (!lista.length) return;
+    e.preventDefault();
+    guardar(CLAVE_PEGADO, huellaTexto(t));
+    ofrecerDatos(lista);
+  });
+
+  // Android: si ya se dio permiso, revisar lo copiado solo al abrir o volver a la app.
+  function revisarPortapapelesSolo() {
+    if (!navigator.clipboard || !navigator.clipboard.readText || !navigator.permissions) return;
+    if (document.hidden || !document.hasFocus() || pestana !== "agregar") return;
+    if (document.body.classList.contains("sin-clave") || document.body.classList.contains("instalando") || $("hojaPegar").classList.contains("on")) return;
+    navigator.permissions.query({ name: "clipboard-read" }).then(function (p) {
+      if (p.state !== "granted") return;
+      return navigator.clipboard.readText().then(function (t) {
+        if (!t || huellaTexto(t) === leer(CLAVE_PEGADO, "")) return; // ya se ofreció esto
+        revisarTexto(t, false);
+      });
+    }).catch(function () {});
+  }
+  window.addEventListener("focus", function () { setTimeout(revisarPortapapelesSolo, 300); });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) setTimeout(revisarPortapapelesSolo, 400); });
+  $("tbAgregar").addEventListener("click", function () { setTimeout(revisarPortapapelesSolo, 100); });
+  setTimeout(revisarPortapapelesSolo, 800);
 
   /* ───── Lista de patentes guardada en el teléfono (para buscar al instante) ───── */
   // Cada registro: [patente, nombre, teléfono, teléfono 2, empresa, pestaña, fila]
