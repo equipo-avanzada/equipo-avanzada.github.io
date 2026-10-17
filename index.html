@@ -163,19 +163,19 @@
     <section class="card">
       <div id="vistaForm">
         <h2>Registrar vehículo</h2>
-        <form id="form" novalidate>
+        <!-- autocomplete="off": que el teléfono no sugiera nombres, números ni empresas escritos antes -->
+        <form id="form" novalidate autocomplete="off">
           <div class="campo">
             <label for="nombre">Nombre completo</label>
-            <input id="nombre" class="fld" type="text" autocomplete="name" autocapitalize="words" placeholder="Ej: Juan Pérez">
+            <input id="nombre" name="avz-n" class="fld" type="text" autocomplete="off" autocorrect="off" spellcheck="false" autocapitalize="words" placeholder="Ej: Juan Pérez">
           </div>
           <div class="campo">
             <label for="telefono">Teléfono</label>
-            <input id="telefono" class="fld" type="tel" inputmode="numeric" autocomplete="tel" placeholder="9 1234 5678">
+            <input id="telefono" name="avz-t" class="fld" type="text" inputmode="numeric" autocomplete="off" placeholder="9 1234 5678">
           </div>
           <div class="campo">
             <label for="empresa">Empresa o área</label>
-            <input id="empresa" class="fld" type="text" autocapitalize="sentences" placeholder="Ej: Bsound, Productora, Reunión" list="empresas">
-            <datalist id="empresas"></datalist>
+            <input id="empresa" name="avz-e" class="fld" type="text" autocomplete="off" autocorrect="off" autocapitalize="sentences" placeholder="Ej: Bsound, Productora, Reunión">
           </div>
           <div class="campo">
             <label for="patente">Matrícula / Patente</label>
@@ -346,14 +346,8 @@
   $("tbBuscar").addEventListener("click", function () { irA("buscar"); });
 
   /* ───── Utilidades ───── */
-  function cargarEmpresas() {
-    var dl = $("empresas"); dl.innerHTML = "";
-    leer(CLAVE_EMP, []).forEach(function (e) { var o = document.createElement("option"); o.value = e; dl.appendChild(o); });
-  }
-  function recordarEmpresa(e) {
-    var l = leer(CLAVE_EMP, []).filter(function (x) { return x.toLowerCase() !== e.toLowerCase(); });
-    l.unshift(e); guardar(CLAVE_EMP, l.slice(0, 30)); cargarEmpresas();
-  }
+  // Antes la app recordaba las empresas para sugerirlas; ya no. Se borra lo que quedó guardado.
+  try { localStorage.removeItem(CLAVE_EMP); } catch (e) {}
   function limpiarPatente(v) { return (v || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
   function limpiarTel(v) {
     var d = (v || "").replace(/\D/g, "");
@@ -541,7 +535,7 @@
 
     // Se guarda en el teléfono y se envía por detrás.
     var c = cola(); c.push(d); guardar(CLAVE_COLA, c);
-    recordarEmpresa(d.empresa);
+
     ultimoId = d.id;
     cargando(true);
     // La pantalla de éxito sale cuando la hoja confirma o, como máximo, a los 0,7 segundos.
@@ -916,7 +910,7 @@
   })();
 
   window.addEventListener("online", vaciarCola);
-  cargarEmpresas(); mostrarAviso();
+  mostrarAviso();
   if (revisarClave()) { vaciarCola(); cargarIndice(); }
 
   if ("serviceWorker" in navigator) {
