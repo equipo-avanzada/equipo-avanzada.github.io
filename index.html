@@ -109,9 +109,6 @@
 
   /* ── Instalar (iPhone / Android en el navegador) ── */
   /* ── Pegar datos copiados ── */
-  button.pegar{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:46px;margin:-4px 0 16px;border:1.5px dashed var(--rojo);border-radius:12px;background:#FFF7F7;color:var(--rojo-osc);font-family:var(--texto);font-size:15px;font-weight:700;cursor:pointer}
-  button.pegar:active{background:#FBEAEA}
-  #errorPegar{margin:-8px 0 14px}
   .hoja-fondo{position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center}
   .hoja-fondo.on{display:flex}
   .hoja{width:100%;max-width:520px;max-height:88vh;overflow-y:auto;background:#fff;border-radius:24px 24px 0 0;padding:26px 22px calc(20px + env(safe-area-inset-bottom));text-align:center;animation:subir .22s ease-out}
@@ -166,11 +163,6 @@
     <section class="card">
       <div id="vistaForm">
         <h2>Registrar vehículo</h2>
-        <button type="button" class="pegar" id="btnPegar">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M9 13h6M9 17h4"/></svg>
-          Pegar datos copiados
-        </button>
-        <div class="error" id="errorPegar" role="alert"></div>
         <form id="form" novalidate>
           <div class="campo">
             <label for="nombre">Nombre completo</label>
@@ -562,7 +554,7 @@
   });
 
   function formularioNuevo() {
-    $("form").reset(); $("error").textContent = ""; $("errorPegar").textContent = "";
+    $("form").reset(); $("error").textContent = "";
     $("vistaHecho").classList.remove("on"); $("vistaForm").style.display = "";
   }
   $("nuevo").addEventListener("click", function () {
@@ -641,24 +633,26 @@
   $("hpNo").addEventListener("click", function () { restantes = []; cerrarHoja(); });
   $("hojaPegar").addEventListener("click", function (e) { if (e.target === this) { restantes = []; cerrarHoja(); } });
 
-  // Revisa un texto copiado. "avisar" = mostrar mensaje si no sirve (cuando se tocó el botón).
-  function revisarTexto(texto, avisar) {
+  // Revisa un texto copiado y, si tiene datos de un vehículo, ofrece usarlos.
+  function revisarTexto(texto) {
     var lista = window.leerDatosCopiados ? window.leerDatosCopiados(texto) : [];
     if (texto) guardar(CLAVE_PEGADO, huellaTexto(texto)); // no volver a ofrecer lo mismo
-    if (lista.length) { $("errorPegar").textContent = ""; ofrecerDatos(lista); return true; }
-    if (avisar) $("errorPegar").textContent = texto ? "Lo copiado no tiene datos de un vehículo (se necesita la patente y el nombre o teléfono)." : "No hay nada copiado.";
+    if (lista.length) { ofrecerDatos(lista); return true; }
     return false;
   }
 
-  $("btnPegar").addEventListener("click", function () {
-    $("errorPegar").textContent = "";
-    if (!navigator.clipboard || !navigator.clipboard.readText) {
-      $("errorPegar").textContent = "Este teléfono no deja leer lo copiado. Mantén presionado el campo Nombre y toca Pegar.";
-      return;
-    }
-    navigator.clipboard.readText().then(function (t) { revisarTexto(t, true); }).catch(function () {
-      $("errorPegar").textContent = "No se pudo leer lo copiado. Cuando el teléfono pregunte, toca Permitir. También puedes mantener presionado el campo Nombre y tocar Pegar.";
-    });
+  // Android: la primera vez que se toca un campo del formulario, el teléfono pide permiso
+  // para ver lo copiado (una sola vez). Después la ventana aparece sola.
+  // (En iPhone no se hace: Apple mostraría la burbuja "Pegar" cada vez que tocan un campo.)
+  $("form").addEventListener("pointerdown", function () {
+    if (leer("avanzada_permiso_pedido", false) || !navigator.permissions || !navigator.clipboard || !navigator.clipboard.readText) return;
+    navigator.permissions.query({ name: "clipboard-read" }).then(function (p) {
+      if (p.state !== "prompt") return;
+      guardar("avanzada_permiso_pedido", true);
+      return navigator.clipboard.readText().then(function (t) {
+        if (t && huellaTexto(t) !== leer(CLAVE_PEGADO, "")) revisarTexto(t);
+      });
+    }).catch(function () {});
   });
 
   // Si pegan el mensaje completo en cualquier campo, también se ofrece repartirlo.
