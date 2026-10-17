@@ -44,7 +44,7 @@ const CONFIG = {
 
 /* ───────────────────────── ENTRADA ───────────────────────── */
 
-// La app manda todo por POST: { accion: 'agregar' | 'buscar' | 'verificar', clave, ... }
+// La app manda todo por POST: { accion: 'agregar' | 'buscar' | 'indice' | 'verificar', clave, ... }
 function doPost(e) {
   let d;
   try { d = JSON.parse((e && e.postData && e.postData.contents) || '{}'); }
@@ -56,6 +56,8 @@ function doPost(e) {
   try {
     if (d.accion === 'verificar') return json({ ok: true });
     if (d.accion === 'buscar') return json(buscar(d.patente));
+    // La app se guarda esta lista para buscar al instante en el teléfono.
+    if (d.accion === 'indice') return json({ ok: true, registros: leerIndice() });
     return json(agregar(d));
   } catch (err) {
     return json({ ok: false, error: String(err && err.message || err) });
@@ -106,20 +108,21 @@ function agregar(d) {
       hoja.insertRowsAfter(maxFilas, fila - maxFilas + 20);
     }
 
+    const cols = [b.nombre, b.telefono, b.patente, b.empresa, b.fecha || ''].filter(String).map(colNum);
+    const desde = Math.min.apply(null, cols), hasta = Math.max.apply(null, cols);
+
     // Si en la fila de arriba el teléfono está en la columna de empresa (y al revés),
     // seguimos esa misma costumbre para que el bloque quede ordenado.
+    // (Una sola lectura de la fila de arriba: cada lectura a la hoja cuesta tiempo.)
     let colTel = b.telefono, colEmp = b.empresa;
     if (fila > 1) {
-      const telArriba = hoja.getRange(fila - 1, colNum(colTel)).getDisplayValue();
-      const empArriba = hoja.getRange(fila - 1, colNum(colEmp)).getDisplayValue();
+      const arriba = hoja.getRange(fila - 1, desde, 1, hasta - desde + 1).getDisplayValues()[0];
+      const telArriba = arriba[colNum(colTel) - desde], empArriba = arriba[colNum(colEmp) - desde];
       if (pareceTel(empArriba) && !pareceTel(telArriba)) { colTel = b.empresa; colEmp = b.telefono; }
-    }
-
-    if (CONFIG.COPIAR_COLORES && fila > 1) {
-      const cols = [b.nombre, b.telefono, b.patente, b.empresa, b.fecha || ''].filter(String).map(colNum);
-      const desde = Math.min.apply(null, cols), hasta = Math.max.apply(null, cols);
-      hoja.getRange(fila - 1, desde, 1, hasta - desde + 1)
-          .copyTo(hoja.getRange(fila, desde, 1, hasta - desde + 1), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+      if (CONFIG.COPIAR_COLORES) {
+        hoja.getRange(fila - 1, desde, 1, hasta - desde + 1)
+            .copyTo(hoja.getRange(fila, desde, 1, hasta - desde + 1), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+      }
     }
 
     escribir(hoja, fila, b.nombre, nombre);
@@ -130,7 +133,9 @@ function agregar(d) {
 
     SpreadsheetApp.flush();
     if (id) cache.put(id, String(fila), 21600); // 6 horas
-    return { ok: true, fila: fila, columna: b.nombre };
+    const registro = [patente, nombre, telefono, '', empresa, hoja.getName(), fila];
+    agregarAlIndice(registro);
+    return { ok: true, fila: fila, columna: b.nombre, registro: registro };
   } finally {
     lock.releaseLock();
   }
@@ -142,6 +147,45 @@ function buscar(texto) {
   const q = normPatente(texto);
   if (q.length < 3) return { ok: false, error: 'Escribe al menos 3 caracteres de la patente' };
 
+  const resultados = [];
+  leerIndice().forEach(function (r) {
+    const n = r[0];
+    if (n.indexOf(q) === -1 && !unaLetraDistinta(n, q)) return;
+    resultados.push({
+      patente: n, nombre: r[1], telefono: r[2], telefono2: r[3], empresa: r[4],
+      hoja: r[5], fila: r[6], exacta: n === q
+    });
+  });
+
+  // Exactas primero; dentro de cada grupo, las más recientes (más abajo) primero
+  resultados.sort(function (a, b) {
+    if (a.exacta !== b.exacta) return a.exacta ? -1 : 1;
+    return b.fila - a.fila;
+  });
+
+  return { ok: true, consulta: q, total: resultados.length, resultados: resultados.slice(0, CONFIG.MAX_RESULTADOS) };
+}
+
+/* ───────────────────────── ÍNDICE (para que todo sea rápido) ─────────────────────────
+ * En vez de leer toda la hoja en cada búsqueda, armamos una lista con todas las patentes:
+ *   [patente, nombre, teléfono, teléfono 2, empresa, pestaña, fila]
+ * y la guardamos en la memoria rápida de Google (CacheService) por unos minutos.
+ * Cuando la app guarda un registro, se agrega a la lista al tiro.
+ * Si alguien edita la hoja a mano, la lista se renueva sola (al editar, o a los 10 minutos).
+ */
+const INDICE_CLAVE = 'indice_v1';
+const INDICE_SEGUNDOS = 600;   // 10 minutos
+const INDICE_TROZO = 90000;    // la memoria rápida acepta ~100 KB por casilla
+
+function leerIndice() {
+  const guardado = leerIndiceCache();
+  if (guardado) return guardado;
+  const indice = construirIndice();
+  guardarIndiceCache(indice);
+  return indice;
+}
+
+function construirIndice() {
   const libro = SpreadsheetApp.getActiveSpreadsheet();
   const hojas = CONFIG.HOJAS_BUSQUEDA.length
     ? CONFIG.HOJAS_BUSQUEDA.map(function (n) { return libro.getSheetByName(n); }).filter(Boolean)
@@ -155,7 +199,7 @@ function buscar(texto) {
     fijos[colNum(g.patente) - 1] = { nombre: colNum(g.nombre) - 1, telefono: colNum(g.telefono) - 1, empresa: colNum(g.empresa) - 1 };
   });
 
-  const resultados = [];
+  const indice = [];
   hojas.forEach(function (hoja) {
     const datos = hoja.getDataRange().getDisplayValues();
     // Los bloques que se detectan por los títulos mandan; los fijos completan lo que falte.
@@ -176,8 +220,6 @@ function buscar(texto) {
         if (!bruto) continue;
         const n = normPatente(bruto);
         if (!pareceePatente(n)) continue;
-        const contiene = n.indexOf(q) !== -1;
-        if (!contiene && !unaLetraDistinta(n, q)) continue;
 
         const g = grupoPorCol[c];
         const reg = g ? {
@@ -191,29 +233,57 @@ function buscar(texto) {
           const t = reg.telefono; reg.telefono = reg.empresa; reg.empresa = t;
         }
         const tels = separarTelefonos(reg.telefono);
-
-        resultados.push({
-          patente: n,
-          patenteOriginal: String(bruto).trim(),
-          nombre: limpiar(reg.nombre),
-          telefono: tels[0] || '',
-          telefono2: tels[1] || '',
-          empresa: limpiar(reg.empresa),
-          hoja: hoja.getName(),
-          fila: r + 1,
-          exacta: n === q
-        });
+        indice.push([n, limpiar(reg.nombre), tels[0] || '', tels[1] || '', limpiar(reg.empresa), hoja.getName(), r + 1]);
       }
     }
   });
+  return indice;
+}
 
-  // Exactas primero; dentro de cada grupo, las más recientes (más abajo) primero
-  resultados.sort(function (a, b) {
-    if (a.exacta !== b.exacta) return a.exacta ? -1 : 1;
-    return b.fila - a.fila;
-  });
+function leerIndiceCache() {
+  try {
+    const cache = CacheService.getScriptCache();
+    const n = Number(cache.get(INDICE_CLAVE + '_n'));
+    if (!n) return null;
+    const claves = [];
+    for (let i = 0; i < n; i++) claves.push(INDICE_CLAVE + '_' + i);
+    const trozos = cache.getAll(claves);
+    let texto = '';
+    for (let i = 0; i < n; i++) {
+      if (trozos[claves[i]] == null) return null;
+      texto += trozos[claves[i]];
+    }
+    const bytes = Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(texto), 'application/x-gzip')).getBytes();
+    return JSON.parse(Utilities.newBlob(bytes).getDataAsString('UTF-8'));
+  } catch (err) {
+    return null;
+  }
+}
 
-  return { ok: true, consulta: q, total: resultados.length, resultados: resultados.slice(0, CONFIG.MAX_RESULTADOS) };
+function guardarIndiceCache(indice) {
+  try {
+    const texto = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(indice), 'application/json')).getBytes());
+    const valores = {};
+    let n = 0;
+    for (let i = 0; i < texto.length; i += INDICE_TROZO) valores[INDICE_CLAVE + '_' + (n++)] = texto.slice(i, i + INDICE_TROZO);
+    valores[INDICE_CLAVE + '_n'] = String(n);
+    CacheService.getScriptCache().putAll(valores, INDICE_SEGUNDOS);
+  } catch (err) {
+    // Si no cabe en la memoria rápida, simplemente se lee la hoja la próxima vez.
+  }
+}
+
+// Cuando la app guarda un registro, lo sumamos a la lista sin volver a leer la hoja.
+function agregarAlIndice(registro) {
+  const indice = leerIndiceCache();
+  if (!indice) return; // no hay lista guardada: se armará completa en la próxima búsqueda
+  indice.push(registro);
+  guardarIndiceCache(indice);
+}
+
+// Si alguien edita la hoja a mano, borramos la lista para que se arme de nuevo.
+function onEdit() {
+  try { CacheService.getScriptCache().remove(INDICE_CLAVE + '_n'); } catch (err) {}
 }
 
 // Lee los títulos de las primeras filas y arma un grupo por cada columna "PATENTE":
