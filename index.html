@@ -176,7 +176,7 @@
         <div class="check" id="check">
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
         </div>
-        <div class="titulo" id="hechoTitulo">¡Agregado a la PDA!</div>
+        <div class="titulo" id="hechoTitulo">¡Agregado exitoso!</div>
         <div class="estado-envio" id="hechoEstado" aria-live="polite"></div>
         <div class="resumen">
           <div><span>Nombre</span><span id="rNombre"></span></div>
@@ -435,8 +435,10 @@
     else a.classList.remove("on");
   }
   // Los registros se guardan primero en el teléfono (cola) y se mandan a la hoja por detrás.
-  // Así la pantalla de "¡Agregado!" sale al instante, aunque Google se demore o no haya señal.
-  var vaciando = false, ultimoId = "";
+  // El botón muestra "Enviando…" un momento y luego sale "¡Agregado exitoso!",
+  // sin esperar los segundos que se demora Google.
+  var vaciando = false, ultimoId = "", mostrarPendiente = null;
+  var ESPERA_MAXIMA = 700; // ms máximos con el botón en "Enviando…"
   function vaciarCola() {
     if (vaciando) return; var c = cola(); if (!c.length) { mostrarAviso(); return; }
     if (!claveVigente()) { mostrarAviso(); return; }
@@ -445,33 +447,40 @@
     enviar(d).then(function (j) {
       var r = cola().filter(function (x) { return x.id !== d.id; }); guardar(CLAVE_COLA, r);
       if (j.registro) sumarAlIndice(j.registro);
-      if (d.id === ultimoId) estadoHecho("ok", "Guardado en la hoja «patentes»" + (j.fila ? " · fila " + j.fila : "") + ".");
+      if (d.id === ultimoId && mostrarPendiente) mostrarPendiente();
       vaciando = false; vaciarCola();
     }).catch(function (e) {
       vaciando = false; mostrarAviso();
       if (e && e.message === "clave") { pedirClave("Ingresa la clave para enviar los registros pendientes.", true); return; }
       if (d.id === ultimoId) {
-        if (navigator.onLine === false || e instanceof TypeError) estadoHecho("pend", "Sin señal. Quedó guardado en el teléfono y se enviará solo apenas vuelva internet.");
-        else estadoHecho("pend", "La hoja no respondió (" + e.message + "). Se volverá a intentar solo.");
+        if (mostrarPendiente) mostrarPendiente();
+        if (navigator.onLine === false || e instanceof TypeError) avisoHecho("Sin señal: quedó guardado en el teléfono y se enviará solo apenas vuelva internet.");
+        else avisoHecho("No se pudo enviar todavía. Se volverá a intentar solo.");
       }
     });
   }
   // Si quedó algo pendiente, reintentar cada 20 segundos.
   setInterval(function () { if (cola().length && !document.hidden) vaciarCola(); }, 20000);
 
-  function estadoHecho(tipo, texto) {
+  // Solo se muestra algo debajo del título si NO se pudo enviar.
+  function avisoHecho(texto) {
     var e = $("hechoEstado");
-    e.className = "estado-envio " + tipo;
-    e.innerHTML = tipo === "envio" ? '<span class="spin chico"></span>' : tipo === "ok" ? "✓ " : "";
-    e.appendChild(document.createTextNode(texto));
-    $("check").classList.toggle("pend", tipo === "pend");
+    e.className = "estado-envio" + (texto ? " pend" : "");
+    e.textContent = texto || "";
+    $("check").classList.toggle("pend", !!texto);
+  }
+
+  function cargando(si) {
+    $("btn").disabled = si;
+    $("btnTxt").textContent = si ? "Enviando…" : "Agregar a la PDA";
+    $("btnIco").innerHTML = si ? SPIN : ICO_FLECHA;
   }
 
   function mostrarHecho(d) {
     $("rNombre").textContent = d.nombre; $("rTel").textContent = d.telefono;
     $("rEmp").textContent = d.empresa; $("rPat").textContent = d.patente;
-    $("hechoTitulo").textContent = "¡Agregado a la PDA!";
-    estadoHecho("envio", "Enviando a la hoja…");
+    $("hechoTitulo").textContent = "¡Agregado exitoso!";
+    avisoHecho("");
     $("vistaForm").style.display = "none"; $("vistaHecho").classList.add("on");
     window.scrollTo(0, 0);
   }
@@ -496,11 +505,17 @@
     if (!apiLista()) { $("error").textContent = "Falta configurar el link de la hoja (config.js)."; return; }
     if (!revisarClave()) return; // lo escrito queda en el formulario para después de poner la clave
 
-    // Se guarda en el teléfono, se muestra al instante y se envía por detrás.
+    // Se guarda en el teléfono y se envía por detrás.
     var c = cola(); c.push(d); guardar(CLAVE_COLA, c);
     recordarEmpresa(d.empresa);
     ultimoId = d.id;
-    mostrarHecho(d);
+    cargando(true);
+    // La pantalla de éxito sale cuando la hoja confirma o, como máximo, a los 0,7 segundos.
+    mostrarPendiente = function () {
+      mostrarPendiente = null; clearTimeout(t);
+      cargando(false); mostrarHecho(d);
+    };
+    var t = setTimeout(function () { if (mostrarPendiente) mostrarPendiente(); }, ESPERA_MAXIMA);
     vaciarCola();
   });
 
@@ -515,6 +530,7 @@
   var CLAVE_INDICE = "avanzada_indice";
   var FRESCURA_INDICE = 2 * 60 * 1000; // se renueva si tiene más de 2 minutos
   var cargandoIndice = false, turnoBusqueda = 0;
+  var ESPERA_BUSQUEDA = 350; // ms con "Buscando patente…" cuando la lista está en el teléfono
 
   function cargarIndice(forzar) {
     if (!apiLista() || !claveVigente() || cargandoIndice) return;
@@ -563,7 +579,6 @@
   function notaBusqueda(tipo) {
     var n = $("notaBusqueda"), idx = leer(CLAVE_INDICE, null);
     n.innerHTML = "";
-    if (tipo === "revisando") { n.innerHTML = '<span class="spin chico"></span>'; n.appendChild(document.createTextNode("Revisando si hay cambios en la hoja…")); }
     if (tipo === "sin-senal" && idx) {
       var min = Math.max(1, Math.round((Date.now() - idx.t) / 60000));
       n.textContent = "Sin señal: resultados de la lista guardada en el teléfono (de hace " + (min < 60 ? min + " min" : Math.round(min / 60) + " h") + ").";
@@ -573,7 +588,7 @@
   /* ───── Buscar ───── */
   function cargandoBusqueda(si) {
     $("btnBuscar").disabled = si;
-    $("btnBuscarTxt").textContent = si ? "Buscando…" : "Buscar";
+    $("btnBuscarTxt").textContent = si ? "Buscando patente…" : "Buscar";
     $("btnBuscarIco").innerHTML = si ? SPIN : ICO_LUPA;
   }
 
@@ -595,7 +610,6 @@
     var c = el("article", "res");
     var top = el("div", "top");
     top.appendChild(el("div", "pat", r.patente));
-    top.appendChild(el("div", "fila", r.fila ? "Fila " + r.fila + (r.hoja && r.hoja !== "patentes" ? " · " + r.hoja : "") : "Recién agregado · enviando"));
     c.appendChild(top);
 
     var n = el("div", "nom", r.nombre || "Sin nombre");
@@ -681,29 +695,38 @@
     if (!apiLista()) { $("errorBuscar").textContent = "Falta configurar el link de la hoja (config.js)."; return; }
     if (!revisarClave()) return;
     $("qPatente").blur();
-    var turno = ++turnoBusqueda;
+    var turno = ++turnoBusqueda, mostrado = false;
+    cargandoBusqueda(true);
+    $("resultados").innerHTML = ""; notaBusqueda("");
+    function vigente() { return turno === turnoBusqueda; }
 
-    // 1) Si el teléfono tiene la lista guardada, los resultados salen al instante.
+    // 1) Si el teléfono tiene la lista guardada, los resultados salen casi al instante
+    //    (dejamos el "Buscando patente…" un momento para que se note que buscó).
     var local = buscarLocal(q);
-    if (local) { pintarResultados(local, q); notaBusqueda("revisando"); }
-    else { cargandoBusqueda(true); $("resultados").innerHTML = ""; }
+    if (local) setTimeout(function () {
+      if (!vigente() || mostrado) return;
+      mostrado = true; cargandoBusqueda(false); pintarResultados(local, q);
+    }, ESPERA_BUSQUEDA);
 
-    // 2) Igual le preguntamos a la hoja, por si alguien agregó algo recién; si cambió, se actualiza.
+    // 2) Igual le preguntamos a la hoja por detrás, por si alguien agregó algo recién.
+    //    Si hay cambios, los resultados se actualizan solos.
     api({ accion: "buscar", patente: q })
       .then(function (j) {
-        if (turno !== turnoBusqueda) return; // ya hicieron otra búsqueda
-        cargandoBusqueda(false);
-        if (!j || !j.ok) { if (!local) $("errorBuscar").textContent = (j && j.error) || "No se pudo buscar."; notaBusqueda(""); return; }
+        if (!vigente()) return;
+        if (!j || !j.ok) {
+          if (!local) { cargandoBusqueda(false); $("errorBuscar").textContent = (j && j.error) || "No se pudo buscar."; }
+          return;
+        }
         var conPendientes = buscarLocal(q, j.resultados) || j;
-        if (!local || JSON.stringify(local.resultados) !== JSON.stringify(conPendientes.resultados)) pintarResultados(conPendientes, q);
-        notaBusqueda("");
+        if (!mostrado) { mostrado = true; cargandoBusqueda(false); pintarResultados(conPendientes, q); }
+        else if (JSON.stringify(local.resultados) !== JSON.stringify(conPendientes.resultados)) pintarResultados(conPendientes, q);
         cargarIndice(); // de paso, refrescar la lista del teléfono si está vieja
       })
       .catch(function (e) {
-        if (turno !== turnoBusqueda) return;
+        if (!vigente()) return;
+        if (e && e.message === "clave") { cargandoBusqueda(false); pedirClave("Ingresa la clave del equipo para buscar.", true); return; }
+        if (local) { setTimeout(function () { if (vigente()) notaBusqueda("sin-senal"); }, ESPERA_BUSQUEDA); return; }
         cargandoBusqueda(false);
-        if (e && e.message === "clave") { pedirClave("Ingresa la clave del equipo para buscar.", true); return; }
-        if (local) { notaBusqueda("sin-senal"); return; }
         $("errorBuscar").textContent = navigator.onLine === false ? "Sin señal. Intenta de nuevo cuando tengas internet." : "No se pudo conectar con la hoja.";
       });
   });
